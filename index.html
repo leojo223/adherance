@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -152,19 +153,45 @@
 
 </div>
 <script>
-const WINDOW_START = 5 * 60 + 30;  // 5:30am in mins
-const WINDOW_END   = 21 * 60 + 30; // 9:30pm in mins
+const WINDOW_START = 5 * 60 + 30;
+const WINDOW_END   = 21 * 60 + 30;
 
-const WEEKLY_DATA = [
-  { day:'Sat 29 Mar', onQueue:120, away:5,  pct:96 },
-  { day:'Sun 30 Mar', onQueue:null, away:null, pct:null, historical:true },
-  { day:'Tue 31 Mar', onQueue:330, away:30, pct:92 },
-  { day:'Wed 1 Apr',  onQueue:300, away:20, pct:94 },
-  { day:'Thu 2 Apr',  onQueue:288, away:43, pct:87 },
-  { day:'Fri 3 Apr',  onQueue:282, away:49, pct:85 },
-  { day:'Sat 4 Apr',  onQueue:null, away:null, pct:null },
-];
-const MONTHLY_DATA = [...WEEKLY_DATA];
+// Historical data keyed by YYYY-MM-DD
+const HISTORICAL = {
+  '2026-03-29': { onQueue:120, away:5,  pct:96 },
+  '2026-03-30': { historical:true },
+  '2026-03-31': { onQueue:330, away:30, pct:92 },
+  '2026-04-01': { onQueue:300, away:20, pct:94 },
+  '2026-04-02': { onQueue:288, away:43, pct:87 },
+  '2026-04-03': { onQueue:282, away:49, pct:85 },
+  '2026-04-04': { onQueue:null, away:null, pct:null, historical:true },
+  '2026-04-05': { onQueue:null, away:null, pct:null, historical:true },
+};
+
+const _MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const _DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function nztDateObj(){
+  const s=new Date().toLocaleString('en-NZ',{timeZone:'Pacific/Auckland',year:'numeric',month:'2-digit',day:'2-digit',hour12:false});
+  const dp=s.split(', ')[0]; const [dd,mm,yyyy]=dp.split('/').map(Number);
+  return new Date(yyyy,mm-1,dd);
+}
+function dateKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function fmtDayLabel(d){ return `${_DAYS[d.getDay()]} ${d.getDate()} ${_MONTHS[d.getMonth()]}`; }
+
+function buildDataset(days){
+  const today=nztDateObj(); const rows=[];
+  for(let i=days-1;i>=0;i--){
+    const d=new Date(today); d.setDate(d.getDate()-i);
+    const k=dateKey(d); const h=HISTORICAL[k];
+    if(i===0){ rows.push({day:fmtDayLabel(d),onQueue:null,away:null,pct:null}); }
+    else if(h){ rows.push(h.historical?{day:fmtDayLabel(d),onQueue:null,away:null,pct:null,historical:true}:{day:fmtDayLabel(d),onQueue:h.onQueue,away:h.away,pct:h.pct}); }
+    else{ rows.push({day:fmtDayLabel(d),onQueue:null,away:null,pct:null,historical:true}); }
+  }
+  return rows;
+}
+function getWeeklyData(){ return buildDataset(7); }
+function getMonthlyData(){ return buildDataset(30); }
 
 let globalQueue=true, awayStartedAt=null, currentPeriod='daily';
 
@@ -210,13 +237,13 @@ function calcDaily(){
 }
 function calcWeekly(){
   const d=calcDaily(); let oq=0,aw=0;
-  WEEKLY_DATA.forEach(x=>{ if(x.onQueue!==null){oq+=x.onQueue;aw+=x.away;} });
+  getWeeklyData().forEach(x=>{ if(x.onQueue!==null&&!x.historical){oq+=x.onQueue;aw+=x.away;} });
   oq+=Math.round(d.onQueueMins); aw+=Math.round(d.awayMins);
   const t=oq+aw; return{onQueueMins:oq,awayMins:aw,pct:t>0?Math.round((oq/t)*100):null};
 }
 function calcMonthly(){
   const d=calcDaily(); let oq=0,aw=0;
-  MONTHLY_DATA.forEach(x=>{ if(x.onQueue!==null){oq+=x.onQueue;aw+=x.away;} });
+  getMonthlyData().forEach(x=>{ if(x.onQueue!==null&&!x.historical){oq+=x.onQueue;aw+=x.away;} });
   oq+=Math.round(d.onQueueMins); aw+=Math.round(d.awayMins);
   const t=oq+aw; return{onQueueMins:oq,awayMins:aw,pct:t>0?Math.round((oq/t)*100):null};
 }
@@ -255,7 +282,7 @@ function updateMetrics(){
 
 function renderHistory(){
   const daily=calcDaily();
-  const dataset=currentPeriod==='weekly'?WEEKLY_DATA:MONTHLY_DATA;
+  const dataset=currentPeriod==='weekly'?getWeeklyData():getMonthlyData();
   const listId=currentPeriod==='weekly'?'weekly-list':'monthly-list';
   document.getElementById(listId).innerHTML=dataset.map(d=>{
     const isToday=d.pct===null&&!d.historical, noData=d.historical;
